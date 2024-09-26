@@ -1,0 +1,66 @@
+use aes::{Aes128, BlockEncrypt, BlockDecrypt};  
+use block_modes::{BlockMode, Cbc};  
+use block_modes::Plainblock;  
+use rand::Rng;  
+use sha2::{Sha256, Digest};  
+use base64::{encode, decode};  
+
+type Aes128Cbc = Cbc<Aes128, block_modes::GenericArray<u8, typenum::U16>>;  
+
+fn encrypt(plain_text: &str, key: &[u8; 16]) -> String {  
+    let mut rng = rand::thread_rng();  
+    let mut iv = [0u8; 16];  
+    rng.fill(&mut iv); // generate a random IV  
+
+    let cipher = Aes128Cbc::new_var(key, &iv).unwrap();  
+    let padded_text = pad_text(plain_text.as_bytes());  
+    
+    let encrypted_data = cipher.encrypt_vec(&padded_text);  
+
+    // Combine IV and encrypted data, encode in base64  
+    let mut combined = iv.to_vec();  
+    combined.extend(encrypted_data);  
+    
+    encode(&combined)  
+}  
+
+fn decrypt(encrypted_text: &str, key: &[u8; 16]) -> String {  
+    let decoded_data = decode(encrypted_text).unwrap();  
+    
+    let iv = &decoded_data[..16]; // Extract IV  
+    let encrypted_data = &decoded_data[16..]; // Extract the actual encrypted data  
+
+    let cipher = Aes128Cbc::new_var(key, iv).unwrap();  
+    
+    let decrypted_padded_text = cipher.decrypt_vec(encrypted_data).unwrap();  
+    let decrypted_text = unpad_text(&decrypted_padded_text);  
+    
+    String::from_utf8(decrypted_text).unwrap()  
+}  
+
+fn pad_text(data: &[u8]) -> Vec<u8> {  
+    let block_size = 16;  
+    let padding_len = block_size - (data.len() % block_size);  
+    let mut padded = Vec::from(data);  
+    padded.extend(vec![padding_len as u8; padding_len]);  
+    padded  
+}  
+
+fn unpad_text(data: &[u8]) -> Vec<u8> {  
+    let padding_len = *data.last().unwrap() as usize;  
+    data[..data.len() - padding_len].to_vec()  
+}  
+
+fn main() {  
+    let mut rng = rand::thread_rng();  
+    let key: [u8; 16] = rng.gen(); // Generate a random 16-byte key  
+
+    let original_text = "This is a secret message.";  
+    println!("Original: {}", original_text);  
+    
+    let encrypted = encrypt(original_text, &key);  
+    println!("Encrypted: {}", encrypted);  
+    
+    let decrypted = decrypt(&encrypted, &key);  
+    println!("Decrypted: {}", decrypted);  
+}
